@@ -9,6 +9,8 @@ const font = Be_Vietnam_Pro({
   weight: ["400", "500", "600", "700"],
 });
 
+const base = process.env.NEXT_PUBLIC_BASE_PATH || "";
+
 export const metadata: Metadata = {
   title: "Thu Chi — Dòng tiền & Công nợ",
   description: "Theo dõi dòng tiền gối đầu từng ngày, ngân sách 50/30/20 và công nợ trả nhiều đợt.",
@@ -16,10 +18,10 @@ export const metadata: Metadata = {
   manifest: "./manifest.webmanifest",
   icons: {
     icon: [
-      { url: "/icon.svg", type: "image/svg+xml" },
-      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: `${base}/icon.svg`, type: "image/svg+xml" },
+      { url: `${base}/icon-192.png`, sizes: "192x192", type: "image/png" },
     ],
-    apple: [{ url: "/icon-192.png", sizes: "192x192" }],
+    apple: [{ url: `${base}/icon-192.png`, sizes: "192x192" }],
   },
   appleWebApp: { capable: true, title: "Thu Chi", statusBarStyle: "default" },
 };
