@@ -15,7 +15,7 @@ export const metadata: Metadata = {
   title: "Thu Chi — Dòng tiền & Công nợ",
   description: "Theo dõi dòng tiền gối đầu từng ngày, ngân sách 50/30/20 và công nợ trả nhiều đợt.",
   applicationName: "Thu Chi",
-  manifest: "./manifest.webmanifest",
+  manifest: `${base}/manifest.webmanifest`,
   icons: {
     icon: [
       { url: `${base}/icon.svg`, type: "image/svg+xml" },
@@ -35,6 +35,9 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="vi">
+      <head>
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+      </head>
       <body className={font.className}>
         <PwaRegister />
         <StoreProvider>{children}</StoreProvider>

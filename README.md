@@ -8,7 +8,7 @@ Bản dùng hằng ngày: https://hikhai.github.io/QL_Dong_Tien/
 
 1. Mở link ở trên bằng Chrome (Android) hoặc Safari (iPhone).
 2. Đăng ký một tên đăng nhập. Mật khẩu chỉ dùng để vào sổ trên máy này và để xác nhận khi sửa ví.
-3. Thêm ra màn hình chính:
+3. Đang đứng ở trang gốc của link trên, thêm ra màn hình chính:
    - **Android:** menu trình duyệt → **Thêm vào Màn hình chính** hoặc **Cài đặt ứng dụng**.
    - **iPhone:** nút Chia sẻ → **Thêm vào Màn hình chính**.
 4. Lần sau bấm icon **Thu Chi**. Máy tính không cần bật. Sau lần mở đầu, app vẫn mở được khi mất mạng.

@@ -1,4 +1,4 @@
-const CACHE = "thuchi-v2";
+const CACHE = "thuchi-v3";
 const PAGES = ["./", "./flow/", "./debts/", "./debts/chi-tiet/", "./budget/", "./settings/", "./history/", "./manifest.webmanifest", "./icon.svg", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", (event) => {
