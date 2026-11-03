@@ -16,6 +16,21 @@ export function PwaRegister() {
   const router = useRouter();
 
   useEffect(() => {
+    const blockPinch = (event: TouchEvent) => {
+      if (event.touches.length > 1) event.preventDefault();
+    };
+    const blockGesture = (event: Event) => event.preventDefault();
+    document.addEventListener("touchmove", blockPinch, { passive: false });
+    document.addEventListener("gesturestart", blockGesture, { passive: false });
+    document.addEventListener("gesturechange", blockGesture, { passive: false });
+    return () => {
+      document.removeEventListener("touchmove", blockPinch);
+      document.removeEventListener("gesturestart", blockGesture);
+      document.removeEventListener("gesturechange", blockGesture);
+    };
+  }, []);
+
+  useEffect(() => {
     if (process.env.NODE_ENV !== "production" || !("serviceWorker" in navigator)) return;
     void navigator.serviceWorker.register(`${base}/sw.js`).then((registration) => registration.update());
   }, []);
