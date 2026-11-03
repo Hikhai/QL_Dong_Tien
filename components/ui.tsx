@@ -55,7 +55,7 @@ export function Button({
 
 export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
   return (
-    <label className="block">
+    <label className="block min-w-0 max-w-full">
       <span className="mb-1.5 block text-sm font-medium">{label}</span>
       {children}
       {hint ? <span className="mt-1 block text-xs text-[var(--muted)]">{hint}</span> : null}
@@ -64,7 +64,7 @@ export function Field({ label, children, hint }: { label: string; children: Reac
 }
 
 export const fieldClass =
-  "w-full rounded-2xl border border-[var(--line)] bg-white px-3 py-3 text-sm outline-none transition focus:border-[var(--brand)]";
+  "block w-full min-w-0 max-w-full rounded-2xl border border-[var(--line)] bg-white px-3 py-3 text-sm outline-none transition focus:border-[var(--brand)]";
 
 export function Sheet({
   open,

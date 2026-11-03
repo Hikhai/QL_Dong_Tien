@@ -55,7 +55,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-lg px-4 pb-32 pt-4">{children}</main>
+      <main className="mx-auto w-full min-w-0 max-w-lg overflow-x-hidden px-4 pb-32 pt-4">{children}</main>
       <nav
         className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--line)] bg-[rgba(255,252,248,0.94)] backdrop-blur"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}

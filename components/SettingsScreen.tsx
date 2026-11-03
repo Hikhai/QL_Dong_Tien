@@ -56,7 +56,7 @@ export function SettingsScreen() {
           Đăng xuất
         </Button>
       </Card>
-      <Card className="space-y-3 p-4">
+      <Card className="min-w-0 space-y-3 overflow-hidden p-4">
         <h2 className="font-semibold">Mốc số dư</h2>
         <p className="text-sm text-[var(--muted)]">
           Số dư đầu ngày bắt đầu bằng tổng số dư ban đầu của các ví
