@@ -271,7 +271,7 @@ function TxRow({ tx, onEdit }: { tx: Transaction; onEdit: () => void }) {
           </span>
           {debt ? (
             <Link
-              href={`/debts/${debt.id}`}
+              href={`/debts/chi-tiet?id=${debt.id}`}
               onClick={(event) => event.stopPropagation()}
               className="rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-800"
             >

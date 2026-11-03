@@ -42,7 +42,7 @@ export function AuthScreen({
       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--brand)]">Thu Chi</p>
       <h1 className="mt-2 text-3xl font-semibold leading-tight">Sổ riêng cho từng người</h1>
       <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
-        Mỗi tài khoản có một sổ dòng tiền, công nợ và ngân sách. Bạn bè đăng ký tên riêng thì không thấy dữ liệu của nhau.
+        Sổ nằm trên điện thoại này, máy tính không cần bật. Trên cùng một máy, mỗi tên đăng nhập là một sổ riêng. Thêm vào Màn hình chính để mở như app.
       </p>
 
       <div className="mt-6 grid grid-cols-2 gap-2 rounded-2xl bg-stone-200/70 p-1">

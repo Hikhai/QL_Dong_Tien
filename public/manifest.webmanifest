@@ -1,0 +1,16 @@
+{
+  "name": "Thu Chi — Dòng tiền & Công nợ",
+  "short_name": "Thu Chi",
+  "description": "Quản lý dòng tiền hằng ngày, ngân sách tháng và công nợ cá nhân",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#efece6",
+  "theme_color": "#1f6b4a",
+  "lang": "vi",
+  "icons": [
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "./icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

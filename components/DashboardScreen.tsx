@@ -162,7 +162,7 @@ export function DashboardScreen() {
         ) : (
           <div className="space-y-2">
             {attention.map((debt) => (
-              <Link key={debt.id} href={`/debts/${debt.id}`} className="flex items-center justify-between gap-3 rounded-2xl bg-stone-50 px-3 py-2">
+              <Link key={debt.id} href={`/debts/chi-tiet?id=${debt.id}`} className="flex items-center justify-between gap-3 rounded-2xl bg-stone-50 px-3 py-2">
                 <span>
                   <span className="block text-sm font-semibold">{debt.counterparty_name}</span>
                   <span className={cn("text-xs", debt.status === "OVERDUE" ? "text-[var(--expense)]" : "text-[var(--warn)]")}>

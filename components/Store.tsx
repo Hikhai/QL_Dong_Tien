@@ -26,6 +26,14 @@ import {
   updateTransaction,
 } from "@/lib/domain";
 import { todayYmd } from "@/lib/dates";
+import {
+  destroySession,
+  loginUser,
+  readLedger,
+  readSession,
+  registerUser,
+  writeLedger,
+} from "@/lib/localDb";
 import { isAppState, normalizeState } from "@/lib/state";
 import type {
   Account,
@@ -79,14 +87,6 @@ export function useStore() {
   return value;
 }
 
-async function readLedger(): Promise<AppState | null> {
-  const response = await fetch("/api/ledger");
-  if (response.status === 401) return null;
-  const body = (await response.json()) as { state?: unknown };
-  if (!isAppState(body.state)) return createInitialState();
-  return normalizeState(body.state);
-}
-
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState | null>(null);
   const [user, setUser] = useState<SessionUser | null>(null);
@@ -94,14 +94,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const ref = useRef<AppState | null>(null);
   const ready = useRef(false);
 
-  const openLedger = async (nextUser: SessionUser) => {
-    const ledger = await readLedger();
-    if (!ledger) {
-      setUser(null);
-      setState(null);
-      setPhase("anon");
-      return;
-    }
+  const openLedger = (nextUser: SessionUser) => {
+    const ledger = readLedger(nextUser.id);
     ref.current = ledger;
     ready.current = true;
     setUser(nextUser);
@@ -110,41 +104,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const response = await fetch("/api/auth/me");
-      if (cancelled) return;
-      if (!response.ok) {
-        setPhase("anon");
-        return;
-      }
-      const body = (await response.json()) as { user: SessionUser };
-      await openLedger(body.user);
-    })();
-    return () => {
-      cancelled = true;
-    };
+    const session = readSession();
+    if (!session) {
+      setPhase("anon");
+      return;
+    }
+    openLedger(session);
   }, []);
 
   useEffect(() => {
-    if (phase !== "ready" || !state || !ready.current) return;
+    if (phase !== "ready" || !state || !user || !ready.current) return;
     const timer = window.setTimeout(() => {
-      void fetch("/api/ledger", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(state),
-      }).then((response) => {
-        if (response.status === 401) {
-          ready.current = false;
-          ref.current = null;
-          setState(null);
-          setUser(null);
-          setPhase("anon");
-        }
-      });
+      const saved = writeLedger(user.id, state);
+      if ("error" in saved) ready.current = false;
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [state, phase]);
+  }, [state, phase, user]);
 
   const actions = useMemo<StoreValue["actions"]>(() => {
     const run = (recipe: (current: AppState, today: string) => AppState): ActionResult => {
@@ -193,7 +168,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setState(fresh);
       },
       logout: async () => {
-        await fetch("/api/auth/logout", { method: "POST" });
+        destroySession();
         ready.current = false;
         ref.current = null;
         setState(null);
@@ -204,14 +179,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = async (mode: "login" | "register", username: string, password: string) => {
-    const response = await fetch(mode === "login" ? "/api/auth/login" : "/api/auth/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
-    });
-    const body = (await response.json().catch(() => null)) as { error?: string; user?: SessionUser } | null;
-    if (!response.ok || !body?.user) return body?.error ?? "Không đăng nhập được.";
-    await openLedger(body.user);
+    const result = mode === "login" ? await loginUser(username, password) : await registerUser(username, password);
+    if ("error" in result) return result.error;
+    openLedger(result.user);
     return null;
   };
 

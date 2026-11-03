@@ -130,7 +130,7 @@ function DebtCard({ debt }: { debt: Debt }) {
   const view = statusView[debt.status];
   const progress = debt.principal_amount === 0 ? 0 : Math.min(100, (debt.total_paid / debt.principal_amount) * 100);
   return (
-    <Link href={`/debts/${debt.id}`} className="block">
+    <Link href={`/debts/chi-tiet?id=${debt.id}`} className="block">
       <Card className="space-y-3 p-4">
         <div className="flex items-start justify-between gap-3">
           <div>

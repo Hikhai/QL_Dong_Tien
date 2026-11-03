@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRef, useState } from "react";
 import { Icon, iconOptions } from "@/components/Icon";
 import { useStore } from "@/components/Store";
+import { confirmPassword } from "@/lib/localDb";
 import { Alert, Button, Card, Field, Sheet, cn, fieldClass } from "@/components/ui";
 import { accountTypeLabel, groupMeta } from "@/lib/defaults";
 import { addDays, formatLongDate } from "@/lib/dates";
@@ -191,7 +192,7 @@ function AccountSheet({
   onClose: () => void;
   onSaved?: (message: string) => void;
 }) {
-  const { state, actions } = useStore();
+  const { state, actions, user } = useStore();
   const editing = target && target !== "new" ? target : null;
   const [name, setName] = useState("");
   const [type, setType] = useState<AccountType>("CASH");
@@ -227,13 +228,9 @@ function AccountSheet({
       return;
     }
     setBusy(true);
-    const response = await fetch("/api/auth/verify", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password }),
-    });
+    const confirmed = await confirmPassword(user.id, password);
     setBusy(false);
-    if (!response.ok) {
+    if (!confirmed) {
       setError("Mật khẩu không đúng.");
       return;
     }
