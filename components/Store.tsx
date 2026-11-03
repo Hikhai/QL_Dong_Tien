@@ -25,7 +25,7 @@ import {
   updateDebt,
   updateTransaction,
 } from "@/lib/domain";
-import { cloudSignIn, cloudSignOut, markLocalEdit, reconcileBook } from "@/lib/cloud";
+import { cloudLogin, cloudSignIn, cloudSignOut, markLocalEdit, reconcileBook } from "@/lib/cloud";
 import { todayYmd } from "@/lib/dates";
 import {
   destroySession,
@@ -33,6 +33,7 @@ import {
   readLedger,
   readSession,
   registerUser,
+  rememberCloudUser,
   writeLedger,
 } from "@/lib/localDb";
 import { isAppState, normalizeState } from "@/lib/state";
@@ -210,15 +211,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const signIn = async (mode: "login" | "register", username: string, password: string) => {
-    const result = mode === "login" ? await loginUser(username, password) : await registerUser(username, password);
-    if ("error" in result) return result.error;
-    const cloudError = await cloudSignIn(username, password);
-    openLedger(result.user);
+  const finishSignIn = async (session: SessionUser, cloudError: string | null) => {
+    openLedger(session);
     cloudReady.current = false;
-    await syncCloud(result.user, readLedger(result.user.id));
+    await syncCloud(session, readLedger(session.id));
     if (cloudError) setNotice(cloudError);
     return null;
+  };
+
+  const signIn = async (mode: "login" | "register", username: string, password: string) => {
+    if (mode === "register") {
+      const created = await registerUser(username, password);
+      if ("error" in created) return created.error;
+      return finishSignIn(created.user, await cloudSignIn(username, password));
+    }
+    const local = await loginUser(username, password);
+    if (!("error" in local)) return finishSignIn(local.user, await cloudSignIn(username, password));
+    const cloudError = await cloudLogin(username, password);
+    if (cloudError) return "missing" in local && local.missing ? cloudError : local.error;
+    const adopted = await rememberCloudUser(username, password);
+    if ("error" in adopted) return adopted.error;
+    return finishSignIn(adopted.user, null);
   };
 
   if (phase === "loading" || (phase === "ready" && (!state || !user))) {

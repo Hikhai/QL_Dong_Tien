@@ -85,6 +85,29 @@ function time(value: string): number {
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
+function cloudFailure(error: { code?: string; message?: string } | null): string {
+  const code = error?.code ?? "";
+  const message = error?.message ?? "";
+  if (code === "email_not_confirmed" || /not confirmed/i.test(message)) {
+    return "Supabase đang chờ xác nhận email. Hãy tắt Confirm email rồi đăng nhập lại.";
+  }
+  if (code === "invalid_credentials" || /invalid login/i.test(message)) {
+    return "Tên đăng nhập hoặc mật khẩu không đúng.";
+  }
+  return "Không kết nối được sổ trên mạng. Thử lại khi có mạng.";
+}
+
+export async function cloudLogin(username: string, password: string): Promise<string | null> {
+  if (!cloudOn()) return "Không kết nối được sổ trên mạng. Thử lại khi có mạng.";
+  try {
+    const signed = await supabase().auth.signInWithPassword({ email: emailFor(username), password });
+    if (!signed.error && signed.data.session) return null;
+    return cloudFailure(signed.error);
+  } catch {
+    return "Không kết nối được sổ trên mạng. Thử lại khi có mạng.";
+  }
+}
+
 export async function cloudSignIn(username: string, password: string): Promise<string | null> {
   if (!cloudOn()) return null;
   const email = emailFor(username);

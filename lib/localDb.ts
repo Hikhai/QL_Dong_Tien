@@ -118,11 +118,49 @@ export async function registerUser(rawUsername: string, password: string): Promi
   return { user: { id: user.id, username: user.username } };
 }
 
-export async function loginUser(rawUsername: string, password: string): Promise<{ user: SessionUser } | { error: string }> {
+export async function rememberCloudUser(rawUsername: string, password: string): Promise<{ user: SessionUser } | { error: string }> {
+  const nameError = usernameError(rawUsername);
+  if (nameError) return { error: nameError };
+  const passError = passwordError(password);
+  if (passError) return { error: passError };
+  const username = normalizeUsername(rawUsername);
+  const db = readDb();
+  const existing = db.users.find((user) => user.username === username);
+  const secret = await hashPassword(password, existing?.salt);
+  if (existing) {
+    existing.salt = secret.salt;
+    existing.password_hash = secret.hash;
+    writeDb(db);
+    saveSession(existing.id);
+    return { user: { id: existing.id, username } };
+  }
+  const createdAt = new Date().toISOString();
+  const user: UserRow = {
+    id: uid(),
+    username,
+    salt: secret.salt,
+    password_hash: secret.hash,
+    created_at: createdAt,
+  };
+  db.users.push(user);
+  db.ledgers.push({
+    user_id: user.id,
+    data: JSON.stringify(createInitialState()),
+    updated_at: createdAt,
+  });
+  writeDb(db);
+  saveSession(user.id);
+  return { user: { id: user.id, username } };
+}
+
+export async function loginUser(
+  rawUsername: string,
+  password: string,
+): Promise<{ user: SessionUser } | { error: string; missing?: boolean }> {
   const username = normalizeUsername(rawUsername);
   const db = readDb();
   const row = db.users.find((user) => user.username === username);
-  if (!row) return { error: "Tên đăng nhập hoặc mật khẩu không đúng." };
+  if (!row) return { error: "Tên đăng nhập hoặc mật khẩu không đúng.", missing: true };
   const secret = await hashPassword(password, row.salt);
   if (secret.hash !== row.password_hash) return { error: "Tên đăng nhập hoặc mật khẩu không đúng." };
   saveSession(row.id);
