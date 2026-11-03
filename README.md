@@ -1,6 +1,6 @@
 # Thu Chi
 
-Sổ dòng tiền, ngân sách và công nợ cho điện thoại. Dữ liệu nằm trên chính máy đang mở app, không cần bật máy tính.
+Sổ dòng tiền, ngân sách và công nợ cho điện thoại. Có mạng thì sổ được đồng bộ qua Supabase. Mất mạng vẫn ghi trên máy, rồi gửi lên khi có mạng lại.
 
 Bản dùng hằng ngày: https://hikhai.github.io/QL_Dong_Tien/
 
@@ -13,7 +13,7 @@ Bản dùng hằng ngày: https://hikhai.github.io/QL_Dong_Tien/
    - **iPhone:** nút Chia sẻ → **Thêm vào Màn hình chính**.
 4. Lần sau bấm icon **Thu Chi**. Máy tính không cần bật. Sau lần mở đầu, app vẫn mở được khi mất mạng.
 
-Mỗi điện thoại có sổ riêng. Bạn bè cài trên máy của họ thì không thấy số của bạn. Trên cùng một điện thoại, mỗi tên đăng nhập là một sổ khác.
+Cùng một tên đăng nhập và mật khẩu trên máy khác sẽ thấy cùng sổ. Trên cùng một điện thoại, mỗi tên đăng nhập là một sổ khác. Bạn bè dùng tên riêng thì không thấy số của bạn.
 
 ## Mang sổ từ máy tính sang điện thoại
 

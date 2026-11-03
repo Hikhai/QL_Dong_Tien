@@ -25,6 +25,7 @@ import {
   updateDebt,
   updateTransaction,
 } from "@/lib/domain";
+import { cloudSignIn, cloudSignOut, markLocalEdit, reconcileBook } from "@/lib/cloud";
 import { todayYmd } from "@/lib/dates";
 import {
   destroySession,
@@ -93,6 +94,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [phase, setPhase] = useState<"loading" | "anon" | "ready">("loading");
   const ref = useRef<AppState | null>(null);
   const ready = useRef(false);
+  const cloudReady = useRef(false);
+  const [notice, setNotice] = useState("");
 
   const openLedger = (nextUser: SessionUser) => {
     const ledger = readLedger(nextUser.id);
@@ -103,6 +106,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setPhase("ready");
   };
 
+  const syncCloud = async (session: SessionUser, local: AppState) => {
+    try {
+      const next = await reconcileBook(session.id, session.username, local);
+      writeLedger(session.id, next);
+      ref.current = next;
+      setState(next);
+      setNotice("");
+    } catch {
+      setNotice("Chưa đồng bộ được lên mạng. Sổ trên máy này vẫn được giữ.");
+    } finally {
+      cloudReady.current = true;
+    }
+  };
+
   useEffect(() => {
     const session = readSession();
     if (!session) {
@@ -110,13 +127,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return;
     }
     openLedger(session);
+    cloudReady.current = false;
+    void syncCloud(session, readLedger(session.id));
   }, []);
 
   useEffect(() => {
-    if (phase !== "ready" || !state || !user || !ready.current) return;
+    if (phase !== "ready" || !state || !user || !ready.current || !cloudReady.current) return;
     const timer = window.setTimeout(() => {
+      markLocalEdit(user.id);
       const saved = writeLedger(user.id, state);
       if ("error" in saved) ready.current = false;
+      void reconcileBook(user.id, user.username, state)
+        .then((next) => {
+          if (next === state) return;
+          writeLedger(user.id, next);
+          ref.current = next;
+          setState(next);
+        })
+        .catch(() => {
+          setNotice("Chưa đồng bộ được lên mạng. Sổ trên máy này vẫn được giữ.");
+        });
     }, 250);
     return () => window.clearTimeout(timer);
   }, [state, phase, user]);
@@ -168,7 +198,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setState(fresh);
       },
       logout: async () => {
+        await cloudSignOut();
         destroySession();
+        cloudReady.current = false;
         ready.current = false;
         ref.current = null;
         setState(null);
@@ -181,7 +213,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const signIn = async (mode: "login" | "register", username: string, password: string) => {
     const result = mode === "login" ? await loginUser(username, password) : await registerUser(username, password);
     if ("error" in result) return result.error;
+    const cloudError = await cloudSignIn(username, password);
     openLedger(result.user);
+    cloudReady.current = false;
+    await syncCloud(result.user, readLedger(result.user.id));
+    if (cloudError) setNotice(cloudError);
     return null;
   };
 
@@ -202,7 +238,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   return (
     <Ctx.Provider value={{ state, today: todayYmd(), user, actions }}>
-      {state.settings.onboarded ? <AppShell>{children}</AppShell> : <Onboarding />}
+      {state.settings.onboarded ? (
+        <AppShell>
+          {notice ? <p className="mb-3 rounded-2xl bg-amber-50 px-3 py-2 text-sm text-amber-950">{notice}</p> : null}
+          {children}
+        </AppShell>
+      ) : (
+        <Onboarding />
+      )}
     </Ctx.Provider>
   );
 }

@@ -42,7 +42,7 @@ export function AuthScreen({
       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--brand)]">Thu Chi</p>
       <h1 className="mt-2 text-3xl font-semibold leading-tight">Sổ riêng cho từng người</h1>
       <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
-        Sổ nằm trên điện thoại này, máy tính không cần bật. Trên cùng một máy, mỗi tên đăng nhập là một sổ riêng. Thêm vào Màn hình chính để mở như app.
+        Cùng tên và mật khẩu trên điện thoại khác sẽ mở cùng một sổ khi có mạng. Mất mạng vẫn ghi được, máy sẽ tự gửi lên khi có mạng lại.
       </p>
 
       <div className="mt-6 grid grid-cols-2 gap-2 rounded-2xl bg-stone-200/70 p-1">

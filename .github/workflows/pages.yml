@@ -29,6 +29,8 @@ jobs:
       - run: npm run build
         env:
           NEXT_PUBLIC_BASE_PATH: /QL_Dong_Tien
+          NEXT_PUBLIC_SUPABASE_URL: https://nwlizjcwkayvgjuxkvra.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_pXcFW5IBFE2F6HiM88illA_XyWAS-Gl
       - uses: actions/upload-pages-artifact@v3
         with:
           path: out
