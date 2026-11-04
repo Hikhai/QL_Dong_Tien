@@ -5,6 +5,7 @@ import { anchorOpening, buildDailySummaries, nextDebtCode, recomputeDebt } from 
 import type {
   Account,
   AccountChange,
+  Activity,
   AccountType,
   AppState,
   Category,
@@ -160,21 +161,84 @@ export function completeSetup(
     assertBalance(balance);
     return { ...account, initial_balance: balance };
   });
+  const changes = accounts.map((account) =>
+    accountChange(account.id, "CREATE", `Ghi số dư ban đầu ${formatVnd(account.initial_balance)}.`, `${input.anchorDate}T00:00`),
+  );
   return {
     ...state,
     accounts,
     settings: { onboarded: true, anchorDate: input.anchorDate },
-    accountChanges: [
-      ...(state.accountChanges ?? []),
-      ...accounts.map((account) =>
-        accountChange(account.id, "CREATE", `Ghi số dư ban đầu ${formatVnd(account.initial_balance)}.`, `${input.anchorDate}T00:00`),
-      ),
-    ],
+    accountChanges: [...(state.accountChanges ?? []), ...changes],
+    activity: [...(state.activity ?? []), ...walletActivity(changes)],
   };
 }
 
 function accountChange(accountId: string, action: AccountChange["action"], summary: string, at = nowStamp()): AccountChange {
   return { id: uid(), account_id: accountId, at, action, summary };
+}
+
+function withActivity(
+  state: AppState,
+  input: { kind: Activity["kind"]; action: Activity["action"]; target_id: string; summary: string; at?: string; id?: string },
+): AppState {
+  const item: Activity = {
+    id: input.id ?? uid(),
+    at: input.at ?? nowStamp(),
+    kind: input.kind,
+    action: input.action,
+    target_id: input.target_id,
+    summary: input.summary,
+  };
+  return { ...state, activity: [...(state.activity ?? []), item] };
+}
+
+function walletActivity(changes: AccountChange[]): Activity[] {
+  return changes.map((change) => ({
+    id: change.id,
+    at: change.at,
+    kind: "WALLET",
+    action: change.action,
+    target_id: change.account_id,
+    summary: change.summary,
+  }));
+}
+
+function typeLabel(type: Transaction["type"]): string {
+  if (type === "INCOME") return "Thu";
+  if (type === "EXPENSE") return "Chi";
+  return "Chuyển";
+}
+
+function accountName(state: AppState, id: string | null): string {
+  if (!id) return "không có";
+  return state.accounts.find((account) => account.id === id)?.name ?? "ví đã xóa";
+}
+
+function txTitle(state: AppState, tx: Transaction): string {
+  if (tx.type === "TRANSFER") return tx.item_detail || "Chuyển tiền";
+  return state.categories.find((category) => category.id === tx.category_id)?.name ?? tx.item_detail;
+}
+
+function txChangeSummary(state: AppState, before: Transaction, after: Transaction): string {
+  const lines: string[] = [];
+  if (before.amount !== after.amount) lines.push(`số tiền ${formatVnd(before.amount)} → ${formatVnd(after.amount)}`);
+  if (before.type !== after.type) lines.push(`loại ${typeLabel(before.type)} → ${typeLabel(after.type)}`);
+  if (before.category_id !== after.category_id) {
+    const previous = state.categories.find((category) => category.id === before.category_id)?.name ?? "không";
+    const next = state.categories.find((category) => category.id === after.category_id)?.name ?? "không";
+    lines.push(`danh mục ${previous} → ${next}`);
+  }
+  if (before.account_id !== after.account_id) lines.push(`ví ${accountName(state, before.account_id)} → ${accountName(state, after.account_id)}`);
+  if (before.destination_account_id !== after.destination_account_id) {
+    lines.push(`ví đích ${accountName(state, before.destination_account_id)} → ${accountName(state, after.destination_account_id)}`);
+  }
+  if (before.transaction_time !== after.transaction_time) {
+    lines.push(`thời điểm ${before.transaction_time.replace("T", " ")} → ${after.transaction_time.replace("T", " ")}`);
+  }
+  if (before.item_detail !== after.item_detail) lines.push(`nội dung “${before.item_detail}” → “${after.item_detail}”`);
+  if (before.notes !== after.notes) lines.push(`ghi chú “${before.notes || "trống"}” → “${after.notes || "trống"}”`);
+  if (lines.length === 0) return "";
+  return `Sửa ${txTitle(state, before)}: ${lines.join(". ")}.`;
 }
 
 export function setAnchorDate(state: AppState, anchorDate: string, today: string): AppState {
@@ -183,7 +247,16 @@ export function setAnchorDate(state: AppState, anchorDate: string, today: string
   if (blocked) {
     throw new DomainError("Còn giao dịch trước ngày bắt đầu mới. Hãy xóa hoặc dời các giao dịch đó.");
   }
-  return { ...state, settings: { ...state.settings, anchorDate } };
+  if (state.settings.anchorDate === anchorDate) return state;
+  return withActivity(
+    { ...state, settings: { ...state.settings, anchorDate } },
+    {
+      kind: "BOOK",
+      action: "UPDATE",
+      target_id: "anchor",
+      summary: `Đổi ngày bắt đầu theo dõi ${state.settings.anchorDate ?? "chưa đặt"} → ${anchorDate}.`,
+    },
+  );
 }
 
 export function setDayNote(state: AppState, date: string, note: string): AppState {
@@ -192,12 +265,24 @@ export function setDayNote(state: AppState, date: string, note: string): AppStat
   const trimmed = note.trim();
   if (!trimmed) delete dayNotes[date];
   else dayNotes[date] = trimmed.slice(0, 280);
-  return { ...state, dayNotes };
+  if ((state.dayNotes[date] ?? "") === (dayNotes[date] ?? "")) return { ...state, dayNotes };
+  return withActivity(
+    { ...state, dayNotes },
+    { kind: "BOOK", action: "UPDATE", target_id: date, summary: `Sửa ghi chú ngày ${date}.` },
+  );
 }
 
 export function addTransaction(state: AppState, input: TxInput, today: string): AppState {
   const tx = buildTransaction(state, input, today);
-  return { ...state, transactions: [...state.transactions, tx] };
+  return withActivity(
+    { ...state, transactions: [...state.transactions, tx] },
+    {
+      kind: "TX",
+      action: "CREATE",
+      target_id: tx.id,
+      summary: `Thêm ${typeLabel(tx.type)} ${formatVnd(tx.amount)} · ${txTitle(state, tx)}.`,
+    },
+  );
 }
 
 export function updateTransaction(state: AppState, id: string, input: TxInput, today: string): AppState {
@@ -233,30 +318,54 @@ export function updateTransaction(state: AppState, id: string, input: TxInput, t
           }
         : item,
     );
-    return refresh(
-      {
-        ...state,
-        transactions: state.transactions.map((tx) => (tx.id === id ? nextTx : tx)),
-        installments,
-      },
-      today,
-    );
+    return finishTransactionEdit(state, current, nextTx, { installments }, today);
   }
-  return {
+  let debts = state.debts;
+  if (current.debt_id && !current.debt_installment_id && nextTx.amount !== current.amount) {
+    const debt = debts.find((item) => item.id === current.debt_id);
+    if (debt) {
+      if (nextTx.amount < debt.total_paid) throw new DomainError("Số tiền nhỏ hơn số đã thanh toán.");
+      debts = debts.map((item) => (item.id === debt.id ? { ...item, principal_amount: nextTx.amount } : item));
+    }
+  }
+  return finishTransactionEdit(state, current, nextTx, { debts }, today);
+}
+
+function finishTransactionEdit(
+  state: AppState,
+  before: Transaction,
+  after: Transaction,
+  patch: Partial<Pick<AppState, "installments" | "debts">>,
+  today: string,
+): AppState {
+  const summary = txChangeSummary(state, before, after);
+  const next = {
     ...state,
-    transactions: state.transactions.map((tx) => (tx.id === id ? nextTx : tx)),
+    ...patch,
+    transactions: state.transactions.map((tx) => (tx.id === after.id ? after : tx)),
   };
+  const logged = summary ? withActivity(next, { kind: "TX", action: "UPDATE", target_id: after.id, summary }) : next;
+  return before.debt_id || patch.installments || patch.debts ? refresh(logged, today) : logged;
 }
 
 export function deleteTransaction(state: AppState, id: string, today: string): AppState {
   const current = state.transactions.find((tx) => tx.id === id);
   if (!current) throw new DomainError("Không tìm thấy giao dịch.");
   const transactions = state.transactions.filter((tx) => tx.id !== id);
-  if (!current.debt_installment_id) {
-    return refresh({ ...state, transactions }, today);
-  }
-  const installments = state.installments.filter((item) => item.id !== current.debt_installment_id);
-  return refresh({ ...state, transactions, installments }, today);
+  const logged = withActivity(
+    { ...state, transactions },
+    {
+      kind: "TX",
+      action: "DELETE",
+      target_id: id,
+      summary: `Xóa ${typeLabel(current.type)} ${formatVnd(current.amount)} · ${txTitle(state, current)}.`,
+    },
+  );
+  if (!current.debt_installment_id) return refresh(logged, today);
+  return refresh(
+    { ...logged, installments: state.installments.filter((item) => item.id !== current.debt_installment_id) },
+    today,
+  );
 }
 
 function assertDebtInput(input: DebtInput) {
@@ -322,7 +431,15 @@ export function addDebt(state: AppState, input: DebtInput, today: string): AppSt
       };
     }
   }
-  return refresh(next, today);
+  return refresh(
+    withActivity(next, {
+      kind: "DEBT",
+      action: "CREATE",
+      target_id: debt.id,
+      summary: `Thêm nợ ${debt.debt_code} ${debt.counterparty_name}, gốc ${formatVnd(debt.principal_amount)}.`,
+    }),
+    today,
+  );
 }
 
 export function updateDebt(
@@ -340,33 +457,69 @@ export function updateDebt(
   if (input.principal_amount < current.total_paid) {
     throw new DomainError("Gốc mới nhỏ hơn số tiền đã thanh toán.");
   }
-  const debts = state.debts.map((debt) =>
-    debt.id === id
-      ? {
-          ...debt,
-          type: input.type,
-          counterparty_name: input.counterparty_name.trim(),
-          counterparty_contact: input.counterparty_contact?.trim() ?? "",
-          purpose: input.purpose.trim(),
-          start_date: input.start_date,
-          due_date: input.due_date,
-          principal_amount: input.principal_amount,
-          notes: input.notes?.trim() ?? "",
-        }
-      : debt,
+  const nextDebt = {
+    ...current,
+    type: input.type,
+    counterparty_name: input.counterparty_name.trim(),
+    counterparty_contact: input.counterparty_contact?.trim() ?? "",
+    purpose: input.purpose.trim(),
+    start_date: input.start_date,
+    due_date: input.due_date,
+    principal_amount: input.principal_amount,
+    notes: input.notes?.trim() ?? "",
+  };
+  const debts = state.debts.map((debt) => (debt.id === id ? nextDebt : debt));
+  const disbursement = state.transactions.find((tx) => tx.debt_id === id && !tx.debt_installment_id);
+  const transactions =
+    disbursement && disbursement.amount !== input.principal_amount
+      ? state.transactions.map((tx) => (tx.id === disbursement.id ? { ...tx, amount: input.principal_amount } : tx))
+      : state.transactions;
+  const lines: string[] = [];
+  if (nextDebt.principal_amount !== current.principal_amount) {
+    lines.push(`gốc ${formatVnd(current.principal_amount)} → ${formatVnd(nextDebt.principal_amount)}`);
+  }
+  if (nextDebt.counterparty_name !== current.counterparty_name) {
+    lines.push(`đối tác “${current.counterparty_name}” → “${nextDebt.counterparty_name}”`);
+  }
+  if (nextDebt.purpose !== current.purpose) lines.push(`mục đích “${current.purpose}” → “${nextDebt.purpose}”`);
+  if (nextDebt.start_date !== current.start_date || nextDebt.due_date !== current.due_date) {
+    lines.push(`thời hạn ${current.start_date}–${current.due_date} → ${nextDebt.start_date}–${nextDebt.due_date}`);
+  }
+  if (nextDebt.type !== current.type) lines.push("đổi chiều nợ");
+  if (disbursement && disbursement.amount !== input.principal_amount) {
+    lines.push(`giao dịch ${typeLabel(disbursement.type)} đi kèm đổi thành ${formatVnd(input.principal_amount)}`);
+  }
+  const next = { ...state, debts, transactions };
+  if (lines.length === 0) return refresh(next, today);
+  return refresh(
+    withActivity(next, {
+      kind: "DEBT",
+      action: "UPDATE",
+      target_id: id,
+      summary: `Sửa nợ ${current.debt_code}: ${lines.join(". ")}.`,
+    }),
+    today,
   );
-  return refresh({ ...state, debts }, today);
 }
 
 export function deleteDebt(state: AppState, id: string, today: string): AppState {
-  if (!state.debts.some((debt) => debt.id === id)) throw new DomainError("Không tìm thấy khoản nợ.");
+  const current = state.debts.find((debt) => debt.id === id);
+  if (!current) throw new DomainError("Không tìm thấy khoản nợ.");
   return refresh(
-    {
-      ...state,
-      debts: state.debts.filter((debt) => debt.id !== id),
-      installments: state.installments.filter((item) => item.debt_id !== id),
-      transactions: state.transactions.filter((tx) => tx.debt_id !== id),
-    },
+    withActivity(
+      {
+        ...state,
+        debts: state.debts.filter((debt) => debt.id !== id),
+        installments: state.installments.filter((item) => item.debt_id !== id),
+        transactions: state.transactions.filter((tx) => tx.debt_id !== id),
+      },
+      {
+        kind: "DEBT",
+        action: "DELETE",
+        target_id: id,
+        summary: `Xóa nợ ${current.debt_code} ${current.counterparty_name}, gốc ${formatVnd(current.principal_amount)}.`,
+      },
+    ),
     today,
   );
 }
@@ -422,11 +575,19 @@ export function addInstallment(state: AppState, input: InstallmentInput, today: 
     created_at: new Date().toISOString(),
   };
   return refresh(
-    {
-      ...state,
-      installments: [...state.installments, installment],
-      transactions: [...state.transactions, tx],
-    },
+    withActivity(
+      {
+        ...state,
+        installments: [...state.installments, installment],
+        transactions: [...state.transactions, tx],
+      },
+      {
+        kind: "DEBT",
+        action: "CREATE",
+        target_id: installment.id,
+        summary: `Ghi đợt ${number} nợ ${debt.debt_code}: ${formatVnd(input.amount)}.`,
+      },
+    ),
     today,
   );
 }
@@ -434,12 +595,21 @@ export function addInstallment(state: AppState, input: InstallmentInput, today: 
 export function deleteInstallment(state: AppState, id: string, today: string): AppState {
   const installment = state.installments.find((item) => item.id === id);
   if (!installment) throw new DomainError("Không tìm thấy đợt thanh toán.");
+  const debt = state.debts.find((item) => item.id === installment.debt_id);
   return refresh(
-    {
-      ...state,
-      installments: state.installments.filter((item) => item.id !== id),
-      transactions: state.transactions.filter((tx) => tx.id !== installment.transaction_id),
-    },
+    withActivity(
+      {
+        ...state,
+        installments: state.installments.filter((item) => item.id !== id),
+        transactions: state.transactions.filter((tx) => tx.id !== installment.transaction_id),
+      },
+      {
+        kind: "DEBT",
+        action: "DELETE",
+        target_id: id,
+        summary: `Xóa đợt ${installment.installment_number}${debt ? ` nợ ${debt.debt_code}` : ""}: ${formatVnd(installment.amount)}.`,
+      },
+    ),
     today,
   );
 }
@@ -452,10 +622,20 @@ export function setBudget(state: AppState, month: string, categoryId: string, am
   const category = state.categories.find((item) => item.id === categoryId && !item.hidden);
   if (!category) throw new DomainError("Không tìm thấy danh mục.");
   const existing = state.budgets.find((row) => row.month_year === month && row.category_id === categoryId);
+  const previous = existing?.budgeted_amount ?? 0;
+  if (previous === amount) return state;
   const budgets = existing
     ? state.budgets.map((row) => (row.id === existing.id ? { ...row, budgeted_amount: amount } : row))
     : [...state.budgets, { id: uid(), month_year: month, category_id: categoryId, budgeted_amount: amount }];
-  return { ...state, budgets };
+  return withActivity(
+    { ...state, budgets },
+    {
+      kind: "BUDGET",
+      action: existing ? "UPDATE" : "CREATE",
+      target_id: categoryId,
+      summary: `Dự toán ${category.name} tháng ${month}: ${formatVnd(previous)} → ${formatVnd(amount)}.`,
+    },
+  );
 }
 
 export function addAccount(
@@ -473,13 +653,12 @@ export function addAccount(
     is_active: true,
     sort: state.accounts.reduce((max, item) => Math.max(max, item.sort), 0) + 1,
   };
+  const change = accountChange(account.id, "CREATE", `Tạo ví ${account.name}, số dư ban đầu ${formatVnd(account.initial_balance)}.`);
   return {
     ...state,
     accounts: [...state.accounts, account],
-    accountChanges: [
-      ...(state.accountChanges ?? []),
-      accountChange(account.id, "CREATE", `Tạo ví ${account.name}, số dư ban đầu ${formatVnd(account.initial_balance)}.`),
-    ],
+    accountChanges: [...(state.accountChanges ?? []), change],
+    activity: [...(state.activity ?? []), ...walletActivity([change])],
   };
 }
 
@@ -511,13 +690,13 @@ export function updateAccount(
     lines.push(nextAccount.is_active ? "Hiện lại khi ghi giao dịch mới" : "Không hiện khi ghi giao dịch mới");
   }
   if (nextAccount.icon !== current.icon) lines.push("Đổi biểu tượng");
+  if (lines.length === 0) return state;
+  const change = accountChange(id, "UPDATE", `${lines.join(". ")}.`);
   return {
     ...state,
     accounts: state.accounts.map((account) => (account.id === id ? nextAccount : account)),
-    accountChanges:
-      lines.length === 0
-        ? (state.accountChanges ?? [])
-        : [...(state.accountChanges ?? []), accountChange(id, "UPDATE", `${lines.join(". ")}.`)],
+    accountChanges: [...(state.accountChanges ?? []), change],
+    activity: [...(state.activity ?? []), ...walletActivity([change])],
   };
 }
 
@@ -541,7 +720,10 @@ export function addCategory(
     hidden: false,
     sort: state.categories.reduce((max, item) => Math.max(max, item.sort), 0) + 1,
   };
-  return { ...state, categories: [...state.categories, category] };
+  return withActivity(
+    { ...state, categories: [...state.categories, category] },
+    { kind: "CATEGORY", action: "CREATE", target_id: category.id, summary: `Thêm danh mục ${category.name}.` },
+  );
 }
 
 export function updateCategory(
@@ -560,10 +742,19 @@ export function updateCategory(
   if (used && next.type !== current.type) {
     throw new DomainError("Danh mục đã có giao dịch nên không đổi loại thu/chi.");
   }
-  return {
-    ...state,
-    categories: state.categories.map((category) => (category.id === id ? next : category)),
-  };
+  const lines: string[] = [];
+  if (next.name !== current.name) lines.push(`tên “${current.name}” → “${next.name}”`);
+  if (next.type !== current.type) lines.push("đổi loại thu/chi");
+  if (next.group !== current.group) lines.push("đổi nhóm");
+  if (next.icon !== current.icon || next.color !== current.color) lines.push("đổi biểu tượng hoặc màu");
+  const replaced = { ...state, categories: state.categories.map((category) => (category.id === id ? next : category)) };
+  if (lines.length === 0) return replaced;
+  return withActivity(replaced, {
+    kind: "CATEGORY",
+    action: "UPDATE",
+    target_id: id,
+    summary: `Sửa danh mục ${current.name}: ${lines.join(". ")}.`,
+  });
 }
 
 export function deleteCategory(state: AppState, id: string): AppState {
@@ -575,7 +766,10 @@ export function deleteCategory(state: AppState, id: string): AppState {
   if (state.transactions.some((tx) => tx.category_id === id) || state.budgets.some((row) => row.category_id === id)) {
     throw new DomainError("Danh mục đang được dùng, không thể xóa.");
   }
-  return { ...state, categories: state.categories.filter((category) => category.id !== id) };
+  return withActivity(
+    { ...state, categories: state.categories.filter((category) => category.id !== id) },
+    { kind: "CATEGORY", action: "DELETE", target_id: id, summary: `Xóa danh mục ${current.name}.` },
+  );
 }
 
 export function closingOn(state: AppState, date: string): number | null {

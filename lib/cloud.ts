@@ -72,6 +72,7 @@ function mergeBooks(local: AppState, remote: AppState): AppState {
     installments: byId(local.installments, remote.installments),
     budgets: byId(local.budgets, remote.budgets),
     accountChanges: byId(local.accountChanges ?? [], remote.accountChanges ?? []),
+    activity: byId(local.activity ?? [], remote.activity ?? []),
     dayNotes: { ...local.dayNotes, ...remote.dayNotes },
   });
 }

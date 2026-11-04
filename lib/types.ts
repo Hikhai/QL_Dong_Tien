@@ -34,6 +34,17 @@ export type AccountChange = {
   summary: string;
 };
 
+export type ActivityKind = "TX" | "WALLET" | "DEBT" | "BUDGET" | "CATEGORY" | "BOOK";
+
+export type Activity = {
+  id: string;
+  at: string;
+  kind: ActivityKind;
+  action: "CREATE" | "UPDATE" | "DELETE";
+  target_id: string;
+  summary: string;
+};
+
 export type Category = {
   id: string;
   code: string;
@@ -126,6 +137,7 @@ export type AppState = {
   budgets: MonthlyBudget[];
   dayNotes: Record<string, string>;
   accountChanges: AccountChange[];
+  activity: Activity[];
 };
 
 export type TxInput = {

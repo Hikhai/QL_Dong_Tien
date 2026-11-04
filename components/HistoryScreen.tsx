@@ -10,21 +10,22 @@ import { accountTypeLabel } from "@/lib/defaults";
 import { formatLongDate, formatTime } from "@/lib/dates";
 import { accountSnapshots } from "@/lib/finance";
 import { formatPlain } from "@/lib/format";
-import type { AccountChange, Transaction, TransactionType } from "@/lib/types";
+import type { Activity, Transaction, TransactionType } from "@/lib/types";
 
-type HistoryFilter = "ALL" | TransactionType | "WALLET";
+type HistoryFilter = "ALL" | TransactionType | "WALLET" | "EDIT";
 
 const filters: Array<{ id: HistoryFilter; label: string }> = [
   { id: "ALL", label: "Tất cả" },
   { id: "INCOME", label: "Thu" },
   { id: "EXPENSE", label: "Chi" },
   { id: "TRANSFER", label: "Chuyển" },
+  { id: "EDIT", label: "Đã sửa" },
   { id: "WALLET", label: "Sửa ví" },
 ];
 
 type HistoryItem =
   | { kind: "tx"; id: string; at: string; date: string; tx: Transaction }
-  | { kind: "wallet"; id: string; at: string; date: string; change: AccountChange };
+  | { kind: "log"; id: string; at: string; date: string; entry: Activity };
 
 export function HistoryScreen() {
   const { state } = useStore();
@@ -47,41 +48,40 @@ export function HistoryScreen() {
 
   const items = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    const transactions: HistoryItem[] =
-      filter === "WALLET"
+    const showTx = filter === "ALL" || filter === "INCOME" || filter === "EXPENSE" || filter === "TRANSFER";
+    const transactions: HistoryItem[] = showTx
+      ? state.transactions
+          .filter((tx) => filter === "ALL" || tx.type === filter)
+          .filter((tx) => walletId === "ALL" || tx.account_id === walletId || tx.destination_account_id === walletId)
+          .filter((tx) => {
+            if (!needle) return true;
+            const category = state.categories.find((item) => item.id === tx.category_id);
+            const account = state.accounts.find((item) => item.id === tx.account_id);
+            const destination = state.accounts.find((item) => item.id === tx.destination_account_id);
+            return [tx.item_detail, tx.notes, category?.name, account?.name, destination?.name]
+              .filter(Boolean)
+              .some((value) => value!.toLowerCase().includes(needle));
+          })
+          .map((tx) => ({ kind: "tx" as const, id: tx.id, at: tx.transaction_time, date: tx.date, tx }))
+      : [];
+    const logs: HistoryItem[] =
+      filter === "INCOME" || filter === "EXPENSE" || filter === "TRANSFER"
         ? []
-        : state.transactions
-            .filter((tx) => filter === "ALL" || tx.type === filter)
-            .filter((tx) => walletId === "ALL" || tx.account_id === walletId || tx.destination_account_id === walletId)
-            .filter((tx) => {
-              if (!needle) return true;
-              const category = state.categories.find((item) => item.id === tx.category_id);
-              const account = state.accounts.find((item) => item.id === tx.account_id);
-              const destination = state.accounts.find((item) => item.id === tx.destination_account_id);
-              return [tx.item_detail, tx.notes, category?.name, account?.name, destination?.name]
-                .filter(Boolean)
-                .some((value) => value!.toLowerCase().includes(needle));
-            })
-            .map((tx) => ({ kind: "tx" as const, id: tx.id, at: tx.transaction_time, date: tx.date, tx }));
-    const changes: HistoryItem[] =
-      filter !== "ALL" && filter !== "WALLET"
-        ? []
-        : (state.accountChanges ?? [])
-            .filter((change) => walletId === "ALL" || change.account_id === walletId)
-            .filter((change) => {
-              if (!needle) return true;
-              const account = state.accounts.find((item) => item.id === change.account_id);
-              return [change.summary, account?.name].filter(Boolean).some((value) => value!.toLowerCase().includes(needle));
-            })
-            .map((change) => ({
-              kind: "wallet" as const,
-              id: change.id,
-              at: change.at,
-              date: change.at.slice(0, 10),
-              change,
+        : (state.activity ?? [])
+            .filter((entry) => !(entry.kind === "TX" && entry.action === "CREATE"))
+            .filter((entry) => (filter === "EDIT" ? entry.action === "UPDATE" || entry.action === "DELETE" : true))
+            .filter((entry) => (filter === "WALLET" ? entry.kind === "WALLET" : true))
+            .filter((entry) => matchesWallet(entry, walletId, state.transactions))
+            .filter((entry) => !needle || entry.summary.toLowerCase().includes(needle))
+            .map((entry) => ({
+              kind: "log" as const,
+              id: entry.id,
+              at: entry.at,
+              date: entry.at.slice(0, 10),
+              entry,
             }));
-    return [...transactions, ...changes].sort((a, b) => b.at.localeCompare(a.at) || b.id.localeCompare(a.id));
-  }, [filter, query, state.accountChanges, state.accounts, state.categories, state.transactions, walletId]);
+    return [...transactions, ...logs].sort((a, b) => b.at.localeCompare(a.at) || b.id.localeCompare(a.id));
+  }, [filter, query, state.activity, state.accounts, state.categories, state.transactions, walletId]);
 
   const groups = useMemo(() => {
     const map = new Map<string, HistoryItem[]>();
@@ -94,7 +94,7 @@ export function HistoryScreen() {
   }, [items]);
 
   const txCount = items.filter((item) => item.kind === "tx").length;
-  const walletCount = items.filter((item) => item.kind === "wallet").length;
+  const editCount = items.filter((item) => item.kind === "log" && (item.entry.action === "UPDATE" || item.entry.action === "DELETE")).length;
 
   return (
     <div className="space-y-4">
@@ -158,10 +158,11 @@ export function HistoryScreen() {
             </p>
           </Card>
         ) : null}
-        <p className="text-sm text-[var(--muted)]">{historyCaption(filter, txCount, walletCount, selected?.account.name)}</p>
+        <p className="text-sm text-[var(--muted)]">{historyCaption(filter, txCount, editCount, selected?.account.name)}</p>
+        <p className="text-xs leading-relaxed text-[var(--muted)]">Chạm một giao dịch để sửa. Số thu, số chi và số dư được tính lại từ số tiền mới.</p>
         {groups.length === 0 ? (
           <Card className="px-4 py-8 text-center text-sm text-[var(--muted)]">
-            {filter === "WALLET" ? "Chưa có lần sửa ví nào." : "Không có mục nào khớp bộ lọc."}
+            {filter === "WALLET" ? "Chưa có lần sửa ví nào." : filter === "EDIT" ? "Chưa có lần sửa hoặc xóa nào." : "Không có mục nào khớp bộ lọc."}
           </Card>
         ) : (
           groups.map(([date, rows]) => (
@@ -172,7 +173,7 @@ export function HistoryScreen() {
                   item.kind === "tx" ? (
                     <HistoryRow key={item.id} tx={item.tx} walletId={walletId} onEdit={() => setEditing(item.tx)} />
                   ) : (
-                    <WalletChangeRow key={item.id} change={item.change} />
+                    <ActivityRow key={item.id} entry={item.entry} />
                   ),
                 )}
               </Card>
@@ -219,6 +220,7 @@ function HistoryRow({ tx, walletId, onEdit }: { tx: Transaction; walletId: strin
         <span className="mt-1 block text-[11px] text-[var(--muted)]">
           {wallet}
           {destination ? ` → ${destination.name}` : ""}
+          {" · Sửa"}
         </span>
       </span>
       <Money value={signed ? amount : tx.amount} signed={signed} className="shrink-0 text-sm font-semibold" />
@@ -226,35 +228,45 @@ function HistoryRow({ tx, walletId, onEdit }: { tx: Transaction; walletId: strin
   );
 }
 
-function historyCaption(filter: HistoryFilter, txCount: number, walletCount: number, walletName?: string): string {
+function matchesWallet(entry: Activity, walletId: string, transactions: Transaction[]): boolean {
+  if (walletId === "ALL") return true;
+  if (entry.kind === "WALLET") return entry.target_id === walletId;
+  if (entry.kind !== "TX") return false;
+  const tx = transactions.find((item) => item.id === entry.target_id);
+  return tx?.account_id === walletId || tx?.destination_account_id === walletId;
+}
+
+function historyCaption(filter: HistoryFilter, txCount: number, editCount: number, walletName?: string): string {
   const parts: string[] = [];
-  if (filter !== "WALLET") parts.push(`${txCount} giao dịch`);
-  if (filter === "WALLET" || walletCount > 0) parts.push(`${walletCount} lần sửa ví`);
+  if (filter !== "WALLET" && filter !== "EDIT") parts.push(`${txCount} giao dịch`);
+  if (filter === "ALL" || filter === "EDIT" || filter === "WALLET") parts.push(`${editCount} lần sửa hoặc xóa`);
   const text = parts.join(", ");
   return walletName ? `${text} của ${walletName}` : text;
 }
 
-function walletTitle(change: AccountChange): string {
-  if (change.action === "UPDATE") return "Sửa ví";
-  if (change.summary.startsWith("Tạo ví")) return "Tạo ví";
-  return "Số dư ban đầu";
+function activityTitle(entry: Activity): string {
+  if (entry.kind === "WALLET" && entry.action === "CREATE" && entry.summary.startsWith("Ghi số dư")) return "Số dư ban đầu";
+  if (entry.kind === "WALLET" && entry.action === "CREATE") return "Tạo ví";
+  if (entry.action === "DELETE") return "Đã xóa";
+  if (entry.action === "CREATE") return "Đã thêm";
+  return "Đã sửa";
 }
 
-function WalletChangeRow({ change }: { change: AccountChange }) {
+function ActivityRow({ entry }: { entry: Activity }) {
   const { state } = useStore();
-  const account = state.accounts.find((item) => item.id === change.account_id);
+  const account = entry.kind === "WALLET" ? state.accounts.find((item) => item.id === entry.target_id) : undefined;
   return (
     <div className="flex w-full items-center gap-3 py-3 text-left">
       <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[var(--brand-soft)] text-[var(--brand)]">
-        <Icon name={account?.icon ?? "landmark"} />
+        <Icon name={account?.icon ?? "scroll-text"} />
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-2">
-          <span className="truncate font-semibold">{walletTitle(change)}</span>
-          <span className="text-xs text-[var(--muted)]">{formatTime(change.at)}</span>
+          <span className="truncate font-semibold">{activityTitle(entry)}</span>
+          <span className="text-xs text-[var(--muted)]">{formatTime(entry.at)}</span>
         </span>
-        <span className="mt-0.5 block text-sm leading-relaxed text-[var(--muted)]">{change.summary}</span>
-        <span className="mt-1 block text-[11px] text-[var(--muted)]">{account?.name ?? "Ví đã xóa"}</span>
+        <span className="mt-0.5 block text-sm leading-relaxed text-[var(--muted)]">{entry.summary}</span>
+        {account ? <span className="mt-1 block text-[11px] text-[var(--muted)]">{account.name}</span> : null}
       </span>
     </div>
   );

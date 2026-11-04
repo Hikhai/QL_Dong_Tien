@@ -90,6 +90,7 @@ export function createInitialState(): AppState {
     budgets: [],
     dayNotes: {},
     accountChanges: [],
+    activity: [],
   };
 }
 

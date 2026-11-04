@@ -69,8 +69,8 @@ export function DashboardScreen() {
         </div>
         <div className="grid grid-cols-3 gap-2 text-xs">
           <Mini label="Đầu ngày" value={todaySummary?.opening_balance ?? 0} />
-          <Mini label="Thu" value={todaySummary?.total_income ?? 0} positive />
-          <Mini label="Chi" value={todaySummary?.total_expense ?? 0} negative />
+          <Mini label="Thu hôm nay" value={todaySummary?.total_income ?? 0} positive />
+          <Mini label="Chi hôm nay" value={todaySummary?.total_expense ?? 0} negative />
         </div>
         <p className="text-sm">
           Biến động ròng <Money value={todaySummary?.net_change ?? 0} signed className="font-semibold" />

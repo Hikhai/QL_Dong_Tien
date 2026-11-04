@@ -86,10 +86,10 @@ function Kpi({ title, planned, actual, plannedLabel }: { title: string; planned:
   return (
     <Card className="p-3">
       <p className="text-xs text-[var(--muted)]">{title}</p>
-      <p className="mt-1 text-[11px] text-[var(--muted)]">{plannedLabel}</p>
+      <p className="mt-1 text-[11px] text-[var(--muted)]">Thực tế</p>
+      <Money value={actual} className="block text-lg font-semibold" />
+      <p className="mt-2 text-[11px] text-[var(--muted)]">{plannedLabel}</p>
       <Money value={planned} className="block text-sm font-semibold" />
-      <p className="mt-2 text-[11px] text-[var(--muted)]">Thực tế</p>
-      <Money value={actual} className="block text-sm font-semibold" />
     </Card>
   );
 }

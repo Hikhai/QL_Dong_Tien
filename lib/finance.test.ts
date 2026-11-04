@@ -11,6 +11,7 @@ import {
   DomainError,
   setBudget,
   updateAccount,
+  updateDebt,
   updateTransaction,
 } from "./domain";
 import { accountSnapshots, anchorOpening, budgetLines, buildDailySummaries, debtPosition, debtStatus } from "./finance";
@@ -269,6 +270,62 @@ describe("công nợ", () => {
     assert.equal(state.transactions.length, 0);
     assert.equal(state.debts[0].remaining_amount, 300_000);
     assert.equal(debtStatus(state.debts[0], TODAY), "OVERDUE");
+  });
+});
+
+describe("sửa số tiền thì thu chi tính lại", () => {
+  it("sửa khoản thu thì tổng thu và dòng tiền trong ngày đổi theo số mới", () => {
+    let state = ready();
+    state = addTransaction(state, {
+      transaction_time: "2026-11-03T09:00",
+      type: "INCOME",
+      category_id: cat(state, "bonus"),
+      amount: 80_000_000,
+      account_id: BANK_ID,
+      item_detail: "Thưởng",
+    }, TODAY);
+    const tx = state.transactions.find((item) => item.item_detail === "Thưởng")!;
+    state = updateTransaction(state, tx.id, {
+      transaction_time: tx.transaction_time,
+      type: "INCOME",
+      category_id: tx.category_id,
+      amount: 90_000_000,
+      account_id: BANK_ID,
+      item_detail: "Thưởng",
+    }, TODAY);
+    const bank = accountSnapshots(state.accounts, state.transactions).find((row) => row.account.id === BANK_ID)!;
+    assert.equal(bank.income, 90_000_000);
+    assert.equal(bank.balance, 10_000_000 + 90_000_000);
+    const day = buildDailySummaries("2026-11-01", anchorOpening(state.accounts), state.transactions, TODAY).get(TODAY)!;
+    assert.equal(day.total_income, 90_000_000);
+    assert.match(state.activity.at(-1)?.summary ?? "", /80\.000\.000 ₫ → 90\.000\.000 ₫/);
+  });
+
+  it("sửa gốc khoản nợ thì giao dịch thu đi kèm đổi theo", () => {
+    let state = ready();
+    state = addDebt(state, {
+      type: "PAYABLE",
+      counterparty_name: "Ngân hàng",
+      purpose: "Vay",
+      start_date: "2026-11-02",
+      due_date: "2026-12-01",
+      principal_amount: 1_000_000,
+      recordDisbursement: true,
+      account_id: BANK_ID,
+    }, TODAY);
+    state = updateDebt(state, state.debts[0].id, {
+      type: "PAYABLE",
+      counterparty_name: "Ngân hàng",
+      purpose: "Vay",
+      start_date: "2026-11-02",
+      due_date: "2026-12-01",
+      principal_amount: 1_500_000,
+    }, TODAY);
+    const linked = state.transactions.find((tx) => tx.debt_id === state.debts[0].id && !tx.debt_installment_id);
+    assert.equal(linked?.amount, 1_500_000);
+    const bank = accountSnapshots(state.accounts, state.transactions).find((row) => row.account.id === BANK_ID)!;
+    assert.equal(bank.income, 1_500_000);
+    assert.match(state.activity.at(-1)?.summary ?? "", /1\.000\.000 ₫ → 1\.500\.000 ₫/);
   });
 });
 
